@@ -30,9 +30,10 @@ This project provides automatic band detection and display for a 2KW HAM Radio L
 
 - **Automatic Band Detection** — Reads 8 TTL inputs from band detector board
 - **4-Character LED Display** — Shows LPF frequency range (e.g., `18:21` for 17m band)
-- **Operating Hours Counter** — Tracks total amplifier operating time (EEPROM)
+- **Operating Hours Counter** — Tracks active time when band selected (EEPROM)
 - **Power-On Counter** — Tracks number of power cycles (EEPROM)
-- **Temperature Monitoring** — Optional NTC thermistor for amplifier temperature
+- **Temperature Monitoring** — Optional NTC thermistor with overheat alert
+- **Overheat Warning** — "RELAY HOT!" scrolls on display when temp > 41°C
 - **Noise Filtering** — Three-layer filter for stable band detection
 - **Serial Debug Menu** — Comprehensive diagnostics via serial port
 
@@ -86,7 +87,7 @@ Press `D` to open the debug menu:
 | `T` | Temperature |
 | `C` | Continuous input monitor |
 | `I` | I2C bus scan |
-| `B` | Cycle brightness |
+| `B` | Cycle brightness (saved to EEPROM) |
 | `R` | Reset Arduino |
 
 ## Startup Display
@@ -101,6 +102,13 @@ Temperature:     32.5 C
 
 Ready. Press 'D' for debug menu.
 ```
+
+## EEPROM Storage
+
+Data persisted across power cycles:
+- **Operating hours** — Counts only when band is active (not "----"), increments each 60 min
+- **Power-on count** — Increments each boot
+- **Brightness** — Saved when changed via 'B' command
 
 ## Installation
 

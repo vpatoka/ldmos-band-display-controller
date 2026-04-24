@@ -37,7 +37,11 @@ const int EEPROM_MAGIC_ADDR = 0;       // 2 bytes - magic number
 const int EEPROM_HOURS_ADDR = 2;       // 4 bytes - operating hours
 const int EEPROM_POWERON_ADDR = 6;     // 4 bytes - power-on count
 const int EEPROM_CHECKSUM_ADDR = 10;   // 1 byte - simple checksum
+const int EEPROM_BRIGHTNESS_ADDR = 11; // 1 byte - display brightness
 const uint16_t EEPROM_MAGIC = 0xA1B2;  // Magic number to detect initialized EEPROM
+
+// Display brightness (0-15)
+uint8_t displayBrightness = 10;        // Default brightness
 
 // Operating statistics
 uint32_t totalOperatingHours = 0;      // Total hours from EEPROM
@@ -62,9 +66,12 @@ const float SERIES_RESISTOR = 10000.0; // 10K series resistor
 const float ADC_MAX = 675.0;
 const float TEMP_CHANGE_THRESHOLD = 2.0;   // Report if changed by 2°C
 const unsigned long TEMP_INTERVAL_MS = 300000; // Report every 5 minutes (300000ms)
+const float TEMP_ALERT_THRESHOLD = 41.0;   // Show alert on display if above this
 
 float lastReportedTemp = -999.0;       // Last temperature reported
 unsigned long lastTempReport = 0;      // Last time we reported temperature
+bool tempAlertActive = false;          // Temperature alert state
+unsigned long lastAlertToggle = 0;     // For alternating display
 
 // === I2C SCANNER CONFIGURATION ===
 const uint8_t VALID_DISPLAY_ADDRS[] = {0x70, 0x71, 0x72, 0x73};
@@ -134,6 +141,7 @@ uint8_t calculateChecksum() {
   sum ^= (powerOnCount >> 16) & 0xFF;
   sum ^= (powerOnCount >> 8) & 0xFF;
   sum ^= powerOnCount & 0xFF;
+  sum ^= displayBrightness;
   return sum;
 }
 
@@ -141,9 +149,11 @@ uint8_t calculateChecksum() {
 void initializeEEPROM() {
   totalOperatingHours = 0;
   powerOnCount = 0;
+  displayBrightness = 10;
   EEPROM.put(EEPROM_MAGIC_ADDR, EEPROM_MAGIC);
   EEPROM.put(EEPROM_HOURS_ADDR, totalOperatingHours);
   EEPROM.put(EEPROM_POWERON_ADDR, powerOnCount);
+  EEPROM.put(EEPROM_BRIGHTNESS_ADDR, displayBrightness);
   EEPROM.put(EEPROM_CHECKSUM_ADDR, calculateChecksum());
 }
 
@@ -160,6 +170,12 @@ void loadFromEEPROM() {
     // Load existing values
     EEPROM.get(EEPROM_HOURS_ADDR, totalOperatingHours);
     EEPROM.get(EEPROM_POWERON_ADDR, powerOnCount);
+    EEPROM.get(EEPROM_BRIGHTNESS_ADDR, displayBrightness);
+
+    // Validate brightness (0-15)
+    if (displayBrightness > 15) {
+      displayBrightness = 10;
+    }
 
     // Verify checksum
     uint8_t storedChecksum;
@@ -217,6 +233,20 @@ void checkTemperature() {
   float currentTemp = readTemperature();
   unsigned long now = millis();
   bool shouldReport = false;
+
+  // Check for temperature alert
+  bool wasAlert = tempAlertActive;
+  tempAlertActive = (currentTemp > TEMP_ALERT_THRESHOLD);
+
+  // Report when alert state changes
+  if (tempAlertActive && !wasAlert) {
+    Serial.print(F("*** TEMPERATURE ALERT: "));
+    Serial.print(currentTemp, 1);
+    Serial.println(F(" C ***"));
+    shouldReport = false;  // Already reported
+  } else if (!tempAlertActive && wasAlert) {
+    Serial.println(F("Temperature back to normal"));
+  }
 
   // Report if temperature changed significantly
   if (abs(currentTemp - lastReportedTemp) >= TEMP_CHANGE_THRESHOLD) {
@@ -320,7 +350,7 @@ void setup() {
     }
   }
 
-  display.setBrightness(10);
+  display.setBrightness(displayBrightness);  // Use saved brightness
 
   // Configure band input pins
   for (int i = 0; i < NUM_BAND_INPUTS; i++) {
@@ -396,6 +426,16 @@ void loop() {
   if (millis() - lastTempCheck > 10000) {  // Check every 10 seconds
     lastTempCheck = millis();
     checkTemperature();
+  }
+
+  // Temperature alert display - scroll "RELAY HOT!" then show band
+  if (tempAlertActive) {
+    unsigned long now = millis();
+    if (now - lastAlertToggle > 5000) {  // Scroll every 5 seconds
+      lastAlertToggle = now;
+      scrollText("RELAY HOT!", 180);  // Scroll warning message
+      processBandChange(lastBandCode);  // Restore band display after scroll
+    }
   }
 
   delay(10);
@@ -509,6 +549,8 @@ void showStatus() {
   Serial.println(powerOnCount);
   Serial.print(F("Display address:  0x"));
   Serial.println(DISPLAY_ADDR, HEX);
+  Serial.print(F("Brightness:       "));
+  Serial.println(displayBrightness);
   Serial.print(F("Current band:     0x"));
   Serial.print(lastBandCode, HEX);
   Serial.print(F(" ("));
@@ -551,13 +593,18 @@ const char* getBandName(uint16_t code) {
   return "????";
 }
 
-// Cycle brightness
+// Cycle brightness and save to EEPROM
 void cycleBrightness() {
-  static uint8_t brightness = 10;
-  brightness = (brightness + 3) % 16;
-  display.setBrightness(brightness);
+  displayBrightness = (displayBrightness + 3) % 16;
+  display.setBrightness(displayBrightness);
+
+  // Save to EEPROM (only when changed via console)
+  EEPROM.put(EEPROM_BRIGHTNESS_ADDR, displayBrightness);
+  EEPROM.put(EEPROM_CHECKSUM_ADDR, calculateChecksum());
+
   Serial.print(F("Brightness: "));
-  Serial.println(brightness);
+  Serial.print(displayBrightness);
+  Serial.println(F(" (saved)"));
 }
 
 // === BAND INPUT READING ===
