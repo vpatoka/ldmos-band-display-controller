@@ -1,0 +1,46 @@
+# AI Assistant Context (not for public distribution)
+CLAUDE.md
+
+# Arduino IDE generated files
+*.elf
+*.hex
+*.bin
+*.map
+
+# Build directories
+build/
+.build/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE settings
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Backup files
+*~
+*.bak
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.temp
+
+# Documentation drafts (keep only README.md)
+DOCUMENTATION.md
+QUICK_REFERENCE.md
+
+# Design documents and prompts
+Design.prompt
+Design.txt
+*.prompt
